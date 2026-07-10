@@ -1,25 +1,40 @@
-import time
-import json
-import os
+"""Backward-compatible premium-access helpers backed by SQLite."""
 
-PREMIUM_FILE = "data/premium_users.json"
+from utils import database as db
 
-def load_premium():
-    if os.path.exists(PREMIUM_FILE):
-        with open(PREMIUM_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-premium_users = load_premium()
 
 def has_active_premium(user_id):
-    user_id = str(user_id)
-    if user_id not in premium_users:
-        return False
-    expiry = premium_users[user_id]
-    return expiry == "lifetime" or expiry > time.time()
+    return db.has_active_premium(user_id)
+
 
 def save_premium(data):
-    with open(PREMIUM_FILE, "w") as f:
-        json.dump(data, f)
+    for uid, expiry in data.items():
+        db.premium_set(uid, expiry)
 
+
+class _PremiumView(dict):
+    """Dict-like live view over the premium table (kept for compatibility)."""
+
+    def __getitem__(self, key):
+        return db.premium_all()[str(key)]
+
+    def __setitem__(self, key, value):
+        db.premium_set(key, value)
+
+    def __delitem__(self, key):
+        db.premium_remove(key)
+
+    def __contains__(self, key):
+        return str(key) in db.premium_all()
+
+    def items(self):
+        return db.premium_all().items()
+
+    def __iter__(self):
+        return iter(db.premium_all())
+
+    def __len__(self):
+        return len(db.premium_all())
+
+
+premium_users = _PremiumView()

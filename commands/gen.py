@@ -1,77 +1,120 @@
-import discord, time, os
+import logging
+
+import discord
 from discord import app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
-from utils.file_io import get_account
-from utils.logger import log_generation
-from utils.cooldowns import check_cooldown, update_cooldown
-from utils.access import has_active_premium
 
-load_dotenv()
-FREE_CHANNEL_ID = int(os.getenv("FREE_CHANNEL_ID"))
-PREMIUM_CHANNEL_ID = int(os.getenv("PREMIUM_CHANNEL_ID"))
+from utils import database as db
+from utils import branding
+
+log = logging.getLogger("warmy.gen")
+
 
 class Gen(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="gen", description="Generate a free or premium R6 account")
+    @app_commands.command(name="gen", description="Generate a free or premium account")
     @app_commands.describe(tier="Choose either free or premium")
-    async def gen(self, interaction: discord.Interaction, tier: str):
+    @app_commands.choices(tier=[
+        app_commands.Choice(name="Free", value="free"),
+        app_commands.Choice(name="Premium", value="premium"),
+    ])
+    async def gen(self, interaction: discord.Interaction, tier: app_commands.Choice[str]):
+        tier = tier.value.lower()
         user_id = str(interaction.user.id)
-        tier = tier.lower()
         channel_id = interaction.channel.id
+        item = db.config_get("item_name", "account")
 
-        if tier not in ["free", "premium"]:
-            await interaction.response.send_message("🚫 Invalid tier. Use `free` or `premium`.", ephemeral=True)
-            return
+        # Feature toggle
+        if db.config_get(f"{tier}_enabled", "1") != "1":
+            embed = branding.make_embed(
+                title="🚫 Unavailable",
+                description=branding.render("msg_feature_disabled"),
+                kind="error",
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        if tier == "free" and channel_id != FREE_CHANNEL_ID:
-            await interaction.response.send_message("❌ Please use this command in the **#🤖│free-gen** channel.", ephemeral=True)
-            return
+        # Channel restriction
+        allowed_channel = db.config_int(f"{tier}_channel_id", 0)
+        if allowed_channel and channel_id != allowed_channel:
+            embed = branding.make_embed(
+                title="❌ Wrong Channel",
+                description=f"{branding.render('msg_wrong_channel')}\nUse <#{allowed_channel}>.",
+                kind="error",
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        if tier == "premium" and channel_id != PREMIUM_CHANNEL_ID:
-            await interaction.response.send_message("❌ Please use this command in the **#🤖│prem-gen** channel.", ephemeral=True)
-            return
+        # Cooldown
+        remaining = db.cooldown_remaining(user_id, tier)
+        if remaining > 0:
+            embed = branding.make_embed(
+                title="⏳ On Cooldown",
+                description=branding.render("msg_cooldown", remaining=branding.format_duration(remaining)),
+                kind="error",
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        if not check_cooldown(user_id, tier):
-            await interaction.response.send_message("⏳ You are on cooldown. Please wait.", ephemeral=True)
-            return
+        # Premium gate
+        if tier == "premium" and not db.has_active_premium(user_id):
+            embed = branding.make_embed(
+                title="🔒 Premium Required",
+                description=branding.render("msg_no_premium"),
+                kind="premium",
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        if tier == "premium" and not has_active_premium(user_id):
-            await interaction.response.send_message("🔒 You don’t have active premium access.", ephemeral=True)
-            return
-
-        filename = f"data/{tier}.txt"
-        account = get_account(filename)
-
+        # Stock
+        account = db.stock_pop(tier)
         if not account:
-            await interaction.response.send_message(f"❌ No {tier} accounts left.", ephemeral=True)
-            return
+            embed = branding.make_embed(
+                title="📭 Out of Stock",
+                description=branding.render("msg_no_stock", tier=tier),
+                kind="error",
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        email, password = account.split(":")
-        embed = discord.Embed(title="🎁 R6 Account Generated", color=discord.Color.blurple())
-        embed.add_field(name="📧 Email", value=f"```{email}```", inline=True)
-        embed.add_field(name="🔑 Password", value=f"```{password}```", inline=True)
+        # Parse credential (safe split)
+        if ":" in account:
+            email, password = account.split(":", 1)
+        else:
+            email, password = account, ""
+
+        dm_embed = branding.make_embed(title=f"🎁 {item} Generated", kind="success")
+        dm_embed.add_field(name="📧 Email / Login", value=f"```{email}```", inline=False)
+        if password:
+            dm_embed.add_field(name="🔑 Password", value=f"```{password}```", inline=False)
+        dm_embed.add_field(name="🏷️ Tier", value=f"`{tier.upper()}`", inline=True)
+        dm_embed.set_footer(text=branding.render("msg_dm_footer"))
 
         try:
-            await interaction.user.send(embed=embed)
-            update_cooldown(user_id, tier)
-
-            confirm = discord.Embed(
-                title="✅ Account Sent",
-                description="We've delivered your account to your **DMs**! Check your inbox.",
-                color=discord.Color.green()
-            )
-            confirm.set_footer(text="Enjoy your account! If it doesn’t work, open a ticket.")
-            await interaction.response.send_message(embed=confirm, ephemeral=False)
-            await log_generation(interaction, tier, account)
-
-
+            await interaction.user.send(embed=dm_embed)
         except discord.Forbidden:
-            await interaction.response.send_message(
-                "❌ I couldn't send you a DM. Please enable DMs from server members.", ephemeral=True
+            # Return the credential to the pool so it isn't lost
+            db.stock_add(tier, account)
+            embed = branding.make_embed(
+                title="📪 DM Failed",
+                description=branding.render("msg_dm_failed"),
+                kind="error",
             )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        # Success bookkeeping
+        db.update_cooldown(user_id, tier)
+        db.record_claim(user_id, str(interaction.user), tier, account)
+
+        confirm = branding.make_embed(
+            title="✅ Delivered",
+            description=branding.render("msg_dm_success"),
+            kind="success",
+        )
+        await interaction.response.send_message(embed=confirm)
+        await self._log(interaction, tier, account)
+
+    async def _log(self, interaction, tier, account):
+        from utils.logger import log_generation
+        await log_generation(interaction, tier, account)
+
 
 async def setup(bot):
     await bot.add_cog(Gen(bot))
