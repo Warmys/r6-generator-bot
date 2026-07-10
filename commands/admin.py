@@ -16,6 +16,43 @@ DURATION_MAP = {
 }
 
 
+async def _grant_role(guild, user_id):
+    """Add the configured premium role to a member. Uses fetch_member (no privileged intent needed)."""
+    role_id = db.config_int("premium_role_id", 0)
+    if not role_id or guild is None:
+        return None
+    role = guild.get_role(role_id)
+    if role is None:
+        return "⚠️ Premium role not found in this server."
+    try:
+        member = await guild.fetch_member(int(user_id))
+        await member.add_roles(role, reason="Premium access granted")
+        return f"Added {role.mention}"
+    except discord.Forbidden:
+        return "⚠️ Missing permission to assign the premium role (need Manage Roles + higher role)."
+    except discord.NotFound:
+        return "⚠️ User is not in this server."
+    except discord.HTTPException:
+        return "⚠️ Could not assign the premium role."
+
+
+async def _revoke_role(guild, user_id):
+    role_id = db.config_int("premium_role_id", 0)
+    if not role_id or guild is None:
+        return None
+    role = guild.get_role(role_id)
+    if role is None:
+        return None
+    try:
+        member = await guild.fetch_member(int(user_id))
+        if role in member.roles:
+            await member.remove_roles(role, reason="Premium access removed")
+            return f"Removed {role.mention}"
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        return "⚠️ Could not remove the premium role."
+    return None
+
+
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -40,12 +77,16 @@ class Admin(commands.Cog):
 
         db.premium_set(user.id, expiry)
 
+        role_note = await _grant_role(interaction.guild, user.id)
+
         exp_display = "Never" if expiry == "lifetime" else f"<t:{int(expiry)}:R>"
         embed = branding.make_embed(title="👑 Premium Access Granted", kind="premium")
         embed.add_field(name="User", value=user.mention, inline=True)
         embed.add_field(name="Duration", value=selected, inline=True)
         embed.add_field(name="Expires", value=exp_display, inline=True)
         embed.add_field(name="Granted By", value=interaction.user.mention, inline=False)
+        if role_note:
+            embed.add_field(name="Role", value=role_note, inline=False)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="removeaccess", description="Remove premium access from a user")
@@ -53,10 +94,14 @@ class Admin(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     async def removeaccess(self, interaction: discord.Interaction, user: discord.User):
         removed = db.premium_remove(user.id)
+        role_note = await _revoke_role(interaction.guild, user.id)
         if removed:
+            desc = f"{user.mention} has been removed from premium access."
+            if role_note:
+                desc += f"\n{role_note}"
             embed = branding.make_embed(
                 title="✅ Premium Removed",
-                description=f"{user.mention} has been removed from premium access.",
+                description=desc,
                 kind="success",
             )
         else:

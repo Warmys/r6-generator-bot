@@ -54,6 +54,9 @@ DEFAULT_CONFIG = {
     "free_enabled": "1",
     "premium_enabled": "1",
 
+    # Discord role granted/revoked with premium access (0 = disabled)
+    "premium_role_id": "0",
+
     # Channels (seeded from env on first launch)
     "free_channel_id": "0",
     "premium_channel_id": "0",
@@ -367,6 +370,21 @@ def premium_all():
     with _lock, _conn() as conn:
         rows = conn.execute("SELECT user_id, expiry FROM premium").fetchall()
     return {r["user_id"]: r["expiry"] for r in rows}
+
+
+def premium_expired():
+    """Return user_ids whose (non-lifetime) premium has expired."""
+    now = time.time()
+    expired = []
+    for uid, expiry in premium_all().items():
+        if expiry == "lifetime":
+            continue
+        try:
+            if float(expiry) <= now:
+                expired.append(uid)
+        except (TypeError, ValueError):
+            continue
+    return expired
 
 
 def has_active_premium(user_id):

@@ -29,6 +29,7 @@ SETTINGS_KEYS = [
     app_commands.Choice(name="Free channel ID", value="free_channel_id"),
     app_commands.Choice(name="Premium channel ID", value="premium_channel_id"),
     app_commands.Choice(name="Log channel ID", value="log_channel_id"),
+    app_commands.Choice(name="Premium role ID (0=off)", value="premium_role_id"),
     app_commands.Choice(name="Item name (e.g. R6 Account)", value="item_name"),
 ]
 
@@ -176,7 +177,7 @@ class Config(commands.Cog):
             "📶 Status": ["status_text", "status_type"],
             "⏱️ Cooldowns": ["cooldown_free", "cooldown_premium"],
             "⚙️ Settings": ["free_enabled", "premium_enabled", "free_channel_id",
-                            "premium_channel_id", "log_channel_id"],
+                            "premium_channel_id", "log_channel_id", "premium_role_id"],
         }
         embed = branding.make_embed(title="🛠️ Current Configuration", kind="primary")
         for section, keys in groups.items():
