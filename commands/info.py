@@ -33,7 +33,7 @@ class Info(commands.Cog):
         embed.add_field(
             name="🔧 Admin",
             value=(
-                "`/stock add` · `/stock remove` · `/stock list` · `/stockclear`\n"
+                "`/stock add` · `/stock upload` · `/stock remove` · `/stock list` · `/stockclear`\n"
                 "`/addaccess` · `/removeaccess` · `/listaccess` · `/setcooldown`\n"
                 "`/code generate` · `/code list` · `/code revoke` · `/code delete`\n"
                 "`/config branding` · `/config footer` · `/config colors` · `/config status`\n"

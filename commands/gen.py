@@ -74,14 +74,14 @@ class Gen(commands.Cog):
             )
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        # Parse credential (safe split)
+        # Parse the rich credential line and build the DM embeds
         account = account.strip()
-
-        dm_embed = branding.make_embed(title=f"{item} Generated!", kind="success")
-        dm_embed.add_field(name="Account Credentials", value=f"```{account}```", inline=False)
+        data = account_parser.parse_account(account)
+        main_embed, inv_embed = account_parser.build_embeds(data, item)
+        embeds = [main_embed] + ([inv_embed] if inv_embed else [])
 
         try:
-            await interaction.user.send(embed=dm_embed)
+            await interaction.user.send(embeds=embeds)
         except discord.Forbidden:
             # Return the credential to the pool so it isn't lost
             db.stock_add(tier, account)

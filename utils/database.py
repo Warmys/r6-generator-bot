@@ -339,6 +339,22 @@ def stock_clear():
     return n
 
 
+def _login_key(credential):
+    """The unique login part (email:pass) used for duplicate detection."""
+    return credential.split("|")[0].strip().lower()
+
+
+def stock_existing_logins():
+    """Set of login keys already present in stock or claim history."""
+    logins = set()
+    with _lock, _conn() as conn:
+        for r in conn.execute("SELECT credential FROM stock").fetchall():
+            logins.add(_login_key(r["credential"]))
+        for r in conn.execute("SELECT credential FROM claims").fetchall():
+            logins.add(_login_key(r["credential"]))
+    return logins
+
+
 # ---------------------------------------------------------------------------
 # Claims (history / used items)
 # ---------------------------------------------------------------------------

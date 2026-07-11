@@ -14,9 +14,21 @@ TIER_CHOICES = [
 
 
 def _parse_credentials(raw: str):
-    """Accept credentials separated by newlines, commas, spaces or semicolons."""
-    tokens = re.split(r"[\s,;]+", raw.strip())
-    return [t for t in tokens if ":" in t]
+    """Accept multiple accounts. Rich lines (with '|') are kept whole; simple
+    email:pass tokens can be space/comma/semicolon separated."""
+    results = []
+    for line in raw.replace(";", "\n").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if "|" in line:
+            if ":" in line.split("|")[0]:
+                results.append(line)
+        else:
+            for tok in re.split(r"[\s,]+", line):
+                if ":" in tok:
+                    results.append(tok)
+    return results
 
 
 class Stock(commands.Cog):
@@ -53,14 +65,62 @@ class Stock(commands.Cog):
             )
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        added = db.stock_add_bulk(tier.value, creds)
-        embed = branding.make_embed(
-            title="✅ Stock Added",
-            description=f"Added **{added}** entr{'y' if added == 1 else 'ies'} to **{tier.value.capitalize()}**.\n"
-                        f"New total: **{db.stock_count(tier.value)}**",
-            kind="success",
-        )
+        existing = db.stock_existing_logins()
+        seen, to_add, dupes = set(), [], 0
+        for c in creds:
+            key = c.split("|")[0].strip().lower()
+            if key in existing or key in seen:
+                dupes += 1
+                continue
+            seen.add(key)
+            to_add.append(c)
+
+        added = db.stock_add_bulk(tier.value, to_add) if to_add else 0
+        desc = (f"Added **{added}** · Skipped **{dupes}** duplicate(s).\n"
+                f"New total: **{db.stock_count(tier.value)}**")
+        embed = branding.make_embed(title="✅ Stock Added", description=desc, kind="success")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @stock.command(name="upload", description="Upload a .txt file of accounts (one per line)")
+    @app_commands.describe(tier="Which tier to add to", file="A .txt file with one account per line")
+    @app_commands.choices(tier=TIER_CHOICES)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def upload(self, interaction: discord.Interaction, tier: app_commands.Choice[str], file: discord.Attachment):
+        if not file.filename.lower().endswith(".txt"):
+            embed = branding.make_embed(title="❌ Wrong File Type",
+                                        description="Please upload a `.txt` file.", kind="error")
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            raw = (await file.read()).decode("utf-8", errors="ignore")
+        except Exception:
+            embed = branding.make_embed(title="❌ Read Failed",
+                                        description="Could not read that file.", kind="error")
+            return await interaction.followup.send(embed=embed, ephemeral=True)
+
+        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+        existing = db.stock_existing_logins()
+        seen, to_add, dupes, invalid = set(), [], 0, 0
+        for ln in lines:
+            login = ln.split("|")[0].strip()
+            if ":" not in login:
+                invalid += 1
+                continue
+            key = login.lower()
+            if key in existing or key in seen:
+                dupes += 1
+                continue
+            seen.add(key)
+            to_add.append(ln)
+
+        added = db.stock_add_bulk(tier.value, to_add) if to_add else 0
+        embed = branding.make_embed(title="📥 Upload Complete", kind="success")
+        embed.add_field(name="✅ Added", value=f"**{added}**", inline=True)
+        embed.add_field(name="♻️ Duplicates skipped", value=f"**{dupes}**", inline=True)
+        embed.add_field(name="⚠️ Invalid skipped", value=f"**{invalid}**", inline=True)
+        embed.add_field(name=f"📦 {tier.value.capitalize()} total", value=f"**{db.stock_count(tier.value)}**", inline=False)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @stock.command(name="remove", description="Remove a number of entries from a tier's stock")
     @app_commands.describe(tier="Which tier to remove from", amount="How many to remove")

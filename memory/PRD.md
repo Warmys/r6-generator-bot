@@ -39,3 +39,18 @@ no web UI so automated browser test agent N/A.)
 
 ## Backlog
 - P2: pagination for /code list & /stock list; /claims history command; low-stock alerts.
+
+## 2026-07-11 — Rich account embeds + TXT upload
+- utils/account_parser.py parses full credential line (email:pass + Username/Level/Items/
+  Email/Phone/Banned/Renown/Credits/Platforms/Wanted*/Skin Link + optional inventory fields).
+- DM now sends rich embed(s): "{item} Generated!", spoiler credentials ||login||, Account
+  Details (username, platform names, level, currency renown/credits, total items, View Profile
+  link when Skin Link present), avatar thumbnail if Avatar field present. Separate Account
+  Inventory embed (Seasonals/Black Ices/Elite Skins/Attachment Skins/Ranked Charms) shown only
+  if those fields are present in the line.
+- /stock upload <tier> <file.txt>: reads every line, skips blanks, skips duplicates (by login),
+  stores full parsed line. /stock add also dedupes now.
+- /config premiumrole <@role>: pick premium role from menu (no ID needed); warns if bot can't manage it.
+- LIMITATION: r6skins.locker is behind Cloudflare + no public API, so live inventory/avatar
+  scraping from Skin Link is NOT reliably possible from a hosted bot. Inventory shows only when
+  included in the credential line; View Profile link always shown so users open the locker themselves.
