@@ -1,51 +1,41 @@
 # Warmy's Services — Discord Bot (PRD)
 
-## Original Problem
-Rebrand an existing "Floyy" Discord account-generation bot into **Warmy's Services**
-without removing/breaking any existing slash commands. Add a SQLite-backed runtime
-configuration system, admin `/config` commands, an improved credential/inventory
-system, and Railway hosting prep.
+## Original
+Rebrand "Floyy" account-gen bot to Warmy's Services; keep all commands; add SQLite
+config, admin config commands, improved inventory, Railway hosting.
 
-## Tech Stack
-- Python + discord.py 2.3.2
-- SQLite (data/warmy.db) — no paid DB
-- Secrets via .env (DISCORD_TOKEN, channel IDs)
+## Stack
+Python 3.13 (Railway) / 3.11 (local) + discord.py 2.3.2 + audioop-lts (3.13) + SQLite.
+Secrets in .env (DISCORD_TOKEN + channel IDs). No paid DB.
 
-## Architecture
-- `bot.py` — entry point, presence, global error handler, loads all cogs in /commands
-- `utils/database.py` — all persistence: config, stock, claims, premium, cooldowns
-- `utils/branding.py` — `make_embed()` pulls live branding/colors/footer from SQLite
-- `utils/{access,cooldowns,file_io}.py` — thin backward-compatible wrappers over DB
-- `commands/{gen,stock,admin,config,info}.py` — cogs
+## Commands (12 top-level synced)
+Public: /gen, /redeem, /stock amount, /help, /about
+Admin: /stock add|remove|list, /stockclear, /addaccess, /removeaccess, /listaccess,
+/setcooldown, /code generate|list|revoke|delete, /config branding|footer|colors|status|
+cooldown|messages|settings|view
 
-## Existing commands (preserved)
-- `/gen`, `/addaccess`, `/removeaccess`, `/listaccess`, `/setcooldown`
-- Original `/stock` overview preserved as `/stock amount` (Discord API can't have a
-  bare command + subcommands under the same name)
-
-## New commands
-- `/stock add|remove|list` (admin), `/stock amount` (public)
-- `/config branding|footer|colors|status|cooldown|messages|settings|view` (admin)
-- `/help`, `/about`
-
-## Implemented (2026-07-10)
-- Full rebrand to Warmy's Services; red/black theme via config; footer with Discord link
-- SQLite config system (branding, colors, footer, status, cooldowns, toggles, channels, messages)
-- SQLite inventory: stock + claim history (used items, who/when), DM-only delivery,
-  cooldown protection, claim logging to log channel, credential restored on DM failure
-- One-time migration of legacy free.txt/premium.txt/JSON into SQLite (576 free, 252 premium)
-- Railway prep: Procfile, runtime.txt, .env.example, .gitignore, README with volume guidance
-- Improved logging, branded error handling, graceful presence updates
+## Implemented
+- 2026-07-10: Full rebrand, SQLite config+inventory, /config, /stock group, /help,/about,
+  claim history, DM-only delivery, cooldowns, Railway prep (Procfile), branded embeds.
+- 2026-07-10: Premium Discord role auto-grant on /addaccess + auto-revoke on expiry
+  (background task every 1 min, uses fetch_member — no privileged intent). runtime.txt removed.
+- 2026-07-10: audioop-lts added for Python 3.13 (fixes ModuleNotFoundError crash).
+- 2026-07-11: /stockclear + emptied legacy free.txt/premium.txt (phantom stock). Cleaner
+  public + DM embeds (title "{item} Generated!", 💌 sent to DMs; DM = single click-to-copy
+  credential code block; removed "open a ticket" footer).
+- 2026-07-11: Premium CODE system — codes table + /code generate (timed, incl 1h/6h/1d/3d/7d/30d/Lifetime),
+  /redeem (starts countdown on redemption, grants access+role), /code list (available/active/
+  expired/revoked + end timeline via <t:..:R>), /code revoke & /code delete (pull access+role).
 
 ## Verified
-- Bot logs in + syncs 9 slash commands (live token)
-- DB: init, migrate, config get/set, stock pop/add/remove, claims, cooldowns
+Live login + sync of 12 commands; DB init/migrate; stock clear; code create/redeem/revoke/
+delete/list; premium expiry detection. (Slash flows validated via direct logic + live sync;
+no web UI so automated browser test agent N/A.)
 
-## Notes / Backlog
-- Server Members privileged intent disabled for reliable startup; `/listaccess` falls
-  back to user IDs when a member isn't cached. Enable in portal + set intents.members=True for richer data.
-- Slash commands not driveable by automated test agent (no web UI); verified via direct logic tests + live login/sync.
+## Notes
+- To fully clear phantom stock on an existing Railway volume, run /stockclear once after deploy.
+- Premium role features require: set premium_role_id via /config settings, bot has Manage Roles,
+  bot role above the premium role.
 
-## Backlog (P1/P2)
-- P1: `/config messages` preview, per-guild config (multi-server)
-- P2: pagination for `/stock list`, claim history command, auto-restock alerts
+## Backlog
+- P2: pagination for /code list & /stock list; /claims history command; low-stock alerts.

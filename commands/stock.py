@@ -103,3 +103,21 @@ class Stock(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Stock(bot))
+    await bot.add_cog(StockClear(bot))
+
+
+class StockClear(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @app_commands.command(name="stockclear", description="Clear ALL stock from every tier (admin only)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def stockclear(self, interaction: discord.Interaction):
+        removed = db.stock_clear()
+        embed = branding.make_embed(
+            title="🧹 Stock Cleared",
+            description=f"Removed **{removed}** entr{'y' if removed == 1 else 'ies'} from all tiers.\n"
+                        f"Free: **{db.stock_count('free')}** · Premium: **{db.stock_count('premium')}**",
+            kind="success",
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)

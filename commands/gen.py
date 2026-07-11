@@ -75,17 +75,10 @@ class Gen(commands.Cog):
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         # Parse credential (safe split)
-        if ":" in account:
-            email, password = account.split(":", 1)
-        else:
-            email, password = account, ""
+        account = account.strip()
 
-        dm_embed = branding.make_embed(title=f"🎁 {item} Generated", kind="success")
-        dm_embed.add_field(name="📧 Email / Login", value=f"```{email}```", inline=False)
-        if password:
-            dm_embed.add_field(name="🔑 Password", value=f"```{password}```", inline=False)
-        dm_embed.add_field(name="🏷️ Tier", value=f"`{tier.upper()}`", inline=True)
-        dm_embed.set_footer(text=branding.render("msg_dm_footer"))
+        dm_embed = branding.make_embed(title=f"{item} Generated!", kind="success")
+        dm_embed.add_field(name="Account Credentials", value=f"```{account}```", inline=False)
 
         try:
             await interaction.user.send(embed=dm_embed)
@@ -104,7 +97,7 @@ class Gen(commands.Cog):
         db.record_claim(user_id, str(interaction.user), tier, account)
 
         confirm = branding.make_embed(
-            title="✅ Delivered",
+            title=f"{item} Generated!",
             description=branding.render("msg_dm_success"),
             kind="success",
         )

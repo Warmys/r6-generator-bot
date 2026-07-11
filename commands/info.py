@@ -16,7 +16,8 @@ class Info(commands.Cog):
         embed = branding.make_embed(title=f"📖 {name} — Help", kind="primary")
         embed.add_field(
             name="🎁 Generation",
-            value="`/gen` — Generate a free or premium account (delivered by DM)",
+            value="`/gen` — Generate a free or premium account (delivered by DM)\n"
+                  "`/redeem` — Redeem a premium access code",
             inline=False,
         )
         embed.add_field(
@@ -32,8 +33,9 @@ class Info(commands.Cog):
         embed.add_field(
             name="🔧 Admin",
             value=(
-                "`/stock add` · `/stock remove` · `/stock list`\n"
+                "`/stock add` · `/stock remove` · `/stock list` · `/stockclear`\n"
                 "`/addaccess` · `/removeaccess` · `/listaccess` · `/setcooldown`\n"
+                "`/code generate` · `/code list` · `/code revoke` · `/code delete`\n"
                 "`/config branding` · `/config footer` · `/config colors` · `/config status`\n"
                 "`/config cooldown` · `/config messages` · `/config settings` · `/config view`"
             ),

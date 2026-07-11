@@ -57,13 +57,16 @@ DEFAULT_CONFIG = {
     # Discord role granted/revoked with premium access (0 = disabled)
     "premium_role_id": "0",
 
+    # Prefix used when generating premium redeem codes
+    "code_prefix": "WARMY",
+
     # Channels (seeded from env on first launch)
     "free_channel_id": "0",
     "premium_channel_id": "0",
     "log_channel_id": "0",
 
     # Customizable user-facing messages ({item}, {tier}, {remaining} placeholders)
-    "msg_dm_success": "We've delivered your {item} to your **DMs**! Check your inbox.",
+    "msg_dm_success": "💌 Your {item} has been sent to your DMs!",
     "msg_dm_footer": "Enjoy your {item}! If it doesn't work, open a ticket.",
     "msg_cooldown": "You're on cooldown. Please wait **{remaining}** before generating again.",
     "msg_no_stock": "We're out of **{tier}** {item}s right now. Please check back later.",
@@ -125,6 +128,19 @@ def init_db():
                 tier    TEXT NOT NULL,
                 seconds INTEGER NOT NULL,
                 PRIMARY KEY (user_id, tier)
+            );
+            CREATE TABLE IF NOT EXISTS codes (
+                code             TEXT PRIMARY KEY,
+                duration_seconds INTEGER NOT NULL,
+                duration_label   TEXT,
+                created_by       TEXT,
+                created_by_name  TEXT,
+                created_at       TEXT NOT NULL,
+                status           TEXT NOT NULL DEFAULT 'available',
+                redeemed_by      TEXT,
+                redeemed_by_name TEXT,
+                redeemed_at      TEXT,
+                expires_at       REAL
             );
             CREATE INDEX IF NOT EXISTS idx_stock_tier ON stock (tier);
             """
@@ -314,6 +330,15 @@ def stock_remove(tier, amount):
     return len(ids)
 
 
+def stock_clear():
+    """Delete ALL stock across every tier. Returns number removed."""
+    with _lock, _conn() as conn:
+        n = conn.execute("SELECT COUNT(*) AS n FROM stock").fetchone()["n"]
+        conn.execute("DELETE FROM stock")
+        conn.commit()
+    return n
+
+
 # ---------------------------------------------------------------------------
 # Claims (history / used items)
 # ---------------------------------------------------------------------------
@@ -451,3 +476,59 @@ def set_custom_cooldown(user_id, tier, seconds):
             (str(user_id), tier, int(seconds)),
         )
         conn.commit()
+
+
+
+# ---------------------------------------------------------------------------
+# Premium redeem codes
+# ---------------------------------------------------------------------------
+def code_create(code, duration_seconds, duration_label, created_by, created_by_name):
+    with _lock, _conn() as conn:
+        conn.execute(
+            "INSERT INTO codes (code, duration_seconds, duration_label, created_by, "
+            "created_by_name, created_at, status) VALUES (?, ?, ?, ?, ?, ?, 'available')",
+            (code, int(duration_seconds), duration_label, str(created_by),
+             created_by_name, _now_iso()),
+        )
+        conn.commit()
+
+
+def code_get(code):
+    with _lock, _conn() as conn:
+        row = conn.execute("SELECT * FROM codes WHERE code=?", (code,)).fetchone()
+    return dict(row) if row else None
+
+
+def code_exists(code):
+    with _lock, _conn() as conn:
+        row = conn.execute("SELECT 1 FROM codes WHERE code=?", (code,)).fetchone()
+    return row is not None
+
+
+def code_redeem(code, user_id, user_name, expires_at):
+    with _lock, _conn() as conn:
+        conn.execute(
+            "UPDATE codes SET status='redeemed', redeemed_by=?, redeemed_by_name=?, "
+            "redeemed_at=?, expires_at=? WHERE code=?",
+            (str(user_id), user_name, _now_iso(), expires_at, code),
+        )
+        conn.commit()
+
+
+def code_revoke(code):
+    with _lock, _conn() as conn:
+        conn.execute("UPDATE codes SET status='revoked' WHERE code=?", (code,))
+        conn.commit()
+
+
+def code_delete(code):
+    with _lock, _conn() as conn:
+        cur = conn.execute("DELETE FROM codes WHERE code=?", (code,))
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def codes_all():
+    with _lock, _conn() as conn:
+        rows = conn.execute("SELECT * FROM codes ORDER BY created_at DESC").fetchall()
+    return [dict(r) for r in rows]
