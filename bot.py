@@ -83,8 +83,12 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
     elif isinstance(error, discord.app_commands.CommandOnCooldown):
         message = f"Please slow down. Try again in {error.retry_after:.0f}s."
     else:
-        message = "Something went wrong while running that command. Please try again."
+        # Surface the real underlying error so it can be diagnosed quickly.
+        original = getattr(error, "original", error)
+        detail = f"{type(original).__name__}: {original}"
         log.exception("Command error: %s", error)
+        message = ("Something went wrong while running that command.\n"
+                   f"```\n{detail[:500]}\n```")
 
     embed = branding.make_embed(title="⚠️ Error", description=message, kind="error")
     try:
