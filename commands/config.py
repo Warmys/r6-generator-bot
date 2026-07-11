@@ -159,6 +159,28 @@ class Config(commands.Cog):
         db.config_set(key.value, value)
         await self._saved(interaction, f"**{key.name}** message updated.")
 
+    @config.command(name="premiumrole", description="Set the role given to premium users (pick from a menu)")
+    @app_commands.describe(role="The premium role to grant/revoke (leave empty to disable)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def premiumrole_cmd(self, interaction, role: discord.Role = None):
+        if role is None:
+            db.config_set("premium_role_id", "0")
+            return await self._saved(interaction, "Premium role **disabled** (no role will be assigned).")
+
+        db.config_set("premium_role_id", str(role.id))
+
+        # Warn if the bot can't actually manage this role
+        warning = ""
+        me = interaction.guild.me if interaction.guild else None
+        if me is not None:
+            if not me.guild_permissions.manage_roles:
+                warning = "\n⚠️ I don't have the **Manage Roles** permission yet."
+            elif role >= me.top_role:
+                warning = ("\n⚠️ This role is **higher than my role**. Drag my role above it in "
+                           "Server Settings → Roles, or I can't assign it.")
+
+        await self._saved(interaction, f"Premium role set to {role.mention}.{warning}")
+
     @config.command(name="settings", description="Toggle features, channels and item name")
     @app_commands.describe(setting="Which setting", value="New value")
     @app_commands.choices(setting=SETTINGS_KEYS)
