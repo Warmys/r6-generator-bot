@@ -103,11 +103,16 @@ def _count(value):
     return len([x for x in value.split(",") if x.strip()])
 
 
+def _clip(text, limit=1024):
+    text = str(text)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def build_embeds(data, item):
     """Return (main_embed, inventory_embed_or_None)."""
     main = branding.make_embed(title=f"{item} Generated!", kind="success")
-    main.description = branding.render("msg_dm_success")
-    main.add_field(name="Account Credentials", value=f"||{data['login']}||", inline=False)
+    main.description = _clip(branding.render("msg_dm_success"), 4096)
+    main.add_field(name="Account Credentials", value=_clip(f"||{data['login']}||"), inline=False)
 
     details = []
     if data.get("username"):
@@ -134,7 +139,7 @@ def build_embeds(data, item):
         details.append(f"**Profile Link** [View Profile]({data['skin_link']})")
 
     if details:
-        main.add_field(name="Account Details", value="\n".join(details), inline=False)
+        main.add_field(name="Account Details", value=_clip("\n".join(details)), inline=False)
 
     if data.get("avatar"):
         main.set_thumbnail(url=data["avatar"])
@@ -144,8 +149,8 @@ def build_embeds(data, item):
     if inv or data.get("charms"):
         inv_embed = branding.make_embed(title="🎒 Account Inventory", kind="success")
         for label, value in inv.items():
-            inv_embed.add_field(name=f"{label} ({_count(value)})", value=value, inline=False)
+            inv_embed.add_field(name=f"{label} ({_count(value)})", value=_clip(value), inline=False)
         if data.get("charms"):
-            inv_embed.add_field(name="🎗️ Ranked Charms", value=str(data["charms"]), inline=False)
+            inv_embed.add_field(name="🎗️ Ranked Charms", value=_clip(str(data["charms"])), inline=False)
 
     return main, inv_embed

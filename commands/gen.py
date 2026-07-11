@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from utils import database as db
 from utils import branding
+from utils import account_parser
 
 log = logging.getLogger("warmy.gen")
 
@@ -74,6 +75,9 @@ class Gen(commands.Cog):
             )
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
+        # Acknowledge immediately so the interaction can't expire while we DM
+        await interaction.response.defer()
+
         # Parse the rich credential line and build the DM embeds
         account = account.strip()
         data = account_parser.parse_account(account)
@@ -90,7 +94,16 @@ class Gen(commands.Cog):
                 description=branding.render("msg_dm_failed"),
                 kind="error",
             )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            return await interaction.edit_original_response(embed=embed)
+        except discord.HTTPException as e:
+            db.stock_add(tier, account)
+            log.warning("DM send failed: %s", e)
+            embed = branding.make_embed(
+                title="⚠️ Could Not Send",
+                description="There was a problem sending your account. Please try again.",
+                kind="error",
+            )
+            return await interaction.edit_original_response(embed=embed)
 
         # Success bookkeeping
         db.update_cooldown(user_id, tier)
@@ -101,7 +114,7 @@ class Gen(commands.Cog):
             description=branding.render("msg_dm_success"),
             kind="success",
         )
-        await interaction.response.send_message(embed=confirm)
+        await interaction.edit_original_response(embed=confirm)
         await self._log(interaction, tier, account)
 
     async def _log(self, interaction, tier, account):
